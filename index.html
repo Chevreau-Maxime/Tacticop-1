@@ -1,0 +1,363 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Multiplayer Local Game</title>
+    <div id="characters" style="left: 0px; top:0; width: 24%; height: 100%; position: absolute;">
+    </div>
+
+    <canvas id="canvas" width="800" height="800" style="left: 25%; top: 0; height: auto; width: 49%; position: absolute;"> CANVAS </canvas>
+    
+    <div style="left: 75%; top: 0; width: 25%; height: 100%; position: absolute;">
+      <p id="lobby" style="background-color: white; position: relative; top: 0px; width: 100%; height:auto;"> coucou c'est moi la zone de texte</p>
+      <input id="color" type="color" onchange="input_color();" style="position: absolute; right: 0%; bottom: 35%; width: 100%; box-sizing: border-box; height: 10%;">
+      <button id="button_1" style="position: absolute; right:0%; bottom: 10%; width: 100%; height: 20%;" onclick="input_validate();"> PRET ? </button>
+    </div>
+
+  </head>
+  <body style="background-color:dimgrey;">
+
+
+    <!-- SCRIPTS -->
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+    <!-- <script src="client.js"></script> -->
+
+
+    <!-- MAIN SCRIPTS -->
+
+    <script>
+
+/********************************************************************************************* */
+/*************************************** INIT ************************************************ */
+/********************************************************************************************* */
+
+      var can = document.getElementById("canvas");
+      var con = can.getContext('2d');
+      window.addEventListener('click', mouseClick, false);
+
+      var socket = io();
+      var name = "?";
+      var myColor = "#000000";
+      document.getElementById("color").value = myColor;
+      input_color();
+      var CELLS_W = 1;
+      var CELLS_H = 1;
+      var CELL_HEIGHT = can.height/CELLS_H;
+      var CELL_WIDTH = can.width/CELLS_W;
+
+      var myKey;
+      var currentOrder = [-1, -1];
+      var queuedOrders = [[], []];
+
+      var CHAR, MAP;
+      var myChar = [];
+      
+
+/********************************************************************************************* */
+/*************************************** MAIN ************************************************ */
+/********************************************************************************************* */
+      
+      while(name == "?" || name == "null" || name.length == 0 || name == undefined){
+        name = prompt("Quel est votre nom : ");
+      }
+      socket.emit('name', name);
+      //console.log(null == null);
+
+      //map_clear();
+      //map_grid();
+
+      socket.on('console_broadcast', function(msg){
+        console.log(msg);
+      });
+      socket.on("lobby_text", function(msg){
+        lobby_update_text(msg);
+      });
+      socket.on("game_start", function(){
+        game_onstart();
+      });
+      socket.on("info_map", function(msg){
+        game_import_map(msg);
+        map_DRAW();
+      });
+      socket.on("info_char", function(msg){
+        game_import_char(msg);
+        map_DRAW();
+      });
+      socket.on("info_key", function(msg){
+        console.log("received key : " + msg);
+        lobby_receive_key(msg);
+      });
+      socket.on("order_pathfind", function(msg){
+        game_import_orders(msg);
+        map_DRAW();
+      });
+
+
+
+
+/********************************************************************************************* */
+/*************************************** GAME ************************************************ */
+/********************************************************************************************* */
+
+      function game_onstart(){
+        document.getElementById("button_1").innerText = "Valider le tour";
+        document.getElementById("color").style = "visibility: hidden;";
+        map_DRAW();
+      }
+
+      function game_import_map(_MAP){
+        CELLS_W = _MAP.length;
+        CELLS_H = _MAP[0].length;
+        CELL_WIDTH = can.width/CELLS_W;
+        CELL_HEIGHT = can.height/CELLS_H;
+
+        MAP = new Array(CELLS_W);
+        for (var i=0; i<CELLS_W; i++){
+          MAP[i] = new Array(CELLS_H);
+          for (var j=0; j<CELLS_H; j++){
+            MAP[i][j] = _MAP[i][j];
+          }
+        }
+      }
+
+      function game_import_char(_CHAR){
+        CHAR = new Array(_CHAR.length);
+        myChar = [];
+        for (var i=0; i<CHAR.length; i++){
+          CHAR[i] = _CHAR[i];
+          if (CHAR[i].ownerKey == myKey){
+            myChar[myChar.length] = i;
+          }
+        }
+      }
+
+      function game_import_orders(path){
+        //replace orders for currently selected character
+        game_orders_clear(currentOrder[0]);
+        for (var i=0; i<path.length; i++){
+          queuedOrders[currentOrder[0]][i] = path[i];
+        }
+
+      }
+
+      function game_orders_clear(character_index){
+        queuedOrders[character_index] = [];
+      }
+
+
+/********************************************************************************************* */
+/*************************************** MAP ************************************************* */
+/********************************************************************************************* */
+
+      function map_DRAW(){
+        //console.log("_START_DRAWING");
+        //CELL_WIDTH = can.clientWidth/CELLS_W;
+        //CELL_HEIGHT = can.clientHeight/CELLS_H;
+        map_clear();
+        map_grid();
+        map_draw_terrain();
+        map_draw_characters();
+        map_left_ui();
+        map_orders();
+        //console.log("_END_DRAWING");
+      }
+
+      function map_left_ui(){
+        var div = document.getElementById("characters");
+        div.innerHTML = "";
+        for (var i = 0; i<2; i++){ //char
+          var txt_char = "Personnage n*" + (i+1); 
+          var br = document.createElement("div");
+          br.innerHTML = "<p style=\"background-color: #ffffff; position:relative; width: 100%; height:200px;\">"+txt_char+"</p>";
+          div.appendChild(br);
+          for (var j=0; j<2; j++){ //type
+            var txt = (j == 0 ? "Bouger":"Attaquer");
+            var elem = document.createElement("button_" + i + "_"+ j);
+            elem.innerHTML = "<button style=\"position: relative; width: 50%; height: 50px;\" onclick=\"input_order_select("+i+","+j+");\"> "+txt+" </button>";
+            //elem.onclick = "input_order_select(" + j + "," + i + ");";
+            //var node;
+            div.appendChild(elem);
+          }  
+        }
+      }
+
+
+      function map_orders(){
+        for(var i=0; i<queuedOrders.length; i++){
+          for (var j=0; j<queuedOrders[i].length-1; j++){
+            var x1 = (queuedOrders[i][j][0] + 0.5) * (CELL_WIDTH);
+            var y1 = (queuedOrders[i][j][1] + 0.5) * (CELL_HEIGHT);
+            var x2 = (queuedOrders[i][j+1][0] + 0.5) * (CELL_WIDTH);
+            var y2 = (queuedOrders[i][j+1][1] + 0.5) * (CELL_HEIGHT);
+            map_order_line(x1, y1, x2, y2);
+          }
+        }
+      }
+
+      function map_order_line(x1, y1, x2, y2){
+        var dot = true;
+        var lineLength = util_distance(x1, y1, x2, y2);
+        var dashLength = 3;
+
+        con.strokeStyle = document.getElementById("color").value;
+        con.lineWidth = 2;
+        con.beginPath();
+        con.moveTo(x1, y1);
+        
+        for (var i=0; i<lineLength/dashLength; i++){
+          var nextX = x1 + (i*(x2-x1)*(dashLength/lineLength));
+          var nextY = y1 + (i*(y2-y1)*(dashLength/lineLength));
+          
+          if (dot) con.lineTo(nextX, nextY);
+          if (!dot) con.moveTo(nextX, nextY);
+          dot = !dot;
+        }
+        //con.lineTo(x2, y2);
+        con.closePath();
+        con.stroke();
+      }
+
+      function map_clear(){
+        con.fillStyle = "rgb(255, 255, 255)";
+        con.fillRect(0, 0, can.width, can.height);
+      }
+
+      function map_grid(){
+        con.strokeStyle = "grey";
+        con.lineWidth = 1;
+        for (var i=0; i<CELLS_W; i++){ //vertical lines
+          con.moveTo(i * CELL_WIDTH, 0);
+          con.lineTo(i * CELL_WIDTH, can.height);
+        }
+        for (var i=0; i<CELLS_H; i++){ //horizontal lines
+          con.moveTo(0, i * CELL_HEIGHT);
+          con.lineTo(can.width, i * CELL_HEIGHT);
+        }
+        con.stroke();
+      }
+
+      function map_draw_terrain(){
+        for (var i=0; i<CELLS_W; i++){
+          for (var j=0; j<CELLS_H; j++){
+            if(MAP[i][j].impassable){
+              map_block(i, j, "#000000");
+            } else if(MAP[i][j].fog){
+              map_block(i, j, "#222222");
+            }
+          }
+        }
+      }
+
+      function map_block(x, y, color="black"){
+        con.fillStyle = color;
+        con.fillRect(x*CELL_WIDTH, y*CELL_HEIGHT, CELL_WIDTH, CELL_HEIGHT);
+      }
+
+      function map_draw_characters(){
+        for (var i=0; i<CHAR.length; i++){
+          map_character(CHAR[i].x, CHAR[i].y, CHAR[i].color);
+          //console.log(CHAR[i]);
+        }
+      }
+
+      function map_character(cell_index_x, cell_index_y, color){
+        con.fillStyle = color;
+        con.beginPath();
+        con.arc((cell_index_x+0.5) * CELL_WIDTH, (cell_index_y+0.5) * CELL_HEIGHT, 0.5*Math.min(CELL_HEIGHT, CELL_WIDTH), 0, Math.PI*2);
+        con.fill()
+        con.closePath();
+      }
+
+      function lobby_update_text(text){
+        document.getElementById("lobby").innerHTML = text;
+      }
+
+      function lobby_receive_key(_key){
+        myKey = _key;
+      }
+
+/********************************************************************************************* */
+/*************************************** INPUT *********************************************** */
+/********************************************************************************************* */
+
+      function input_order_select(char_index, type){
+        //console.log("char_index : " + char_index);
+        //console.log("type : " + type);
+        currentOrder = [char_index, type];
+      }
+
+      function input_validate(){
+        socket.emit("user_ready");
+        document.getElementById("button_1").innerText = "PRET !"
+      }
+
+      function input_click(cell_index_x, cell_index_y){
+        var orderObject =  {x1:CHAR[myChar[currentOrder[0]]].x, 
+                            y1:CHAR[myChar[currentOrder[0]]].y, 
+                            x2:cell_index_x, 
+                            y2:cell_index_y,
+                            char_index:currentOrder[0]};
+        socket.emit("order", orderObject);
+        map_DRAW();
+
+
+        //console.log(currentOrder[0]);
+        //console.log(queuedOrders);
+        //var orderIndex = queuedOrders[currentOrder[0]].length;
+        //queuedOrders[currentOrder[0]][orderIndex] = {type:currentOrder[1], x:cell_index_x, y:cell_index_y};
+
+        //con.fillStyle = "red";
+        //con.fillRect(cell_index_x * CELL_WIDTH, cell_index_y * CELL_HEIGHT, CELL_WIDTH, CELL_HEIGHT);
+        //map_character(cell_index_x, cell_index_y, "red");
+      }
+
+      function mouseClick (e) {
+        var can_x = can.offsetLeft;
+        var can_y = can.offsetTop;
+        var can_w = can.offsetWidth;
+        var can_h = can.offsetHeight;
+        
+        if((e.clientX > can_x) & (e.clientX < can_x+can_w)){ //x coordinate
+          if((e.clientY > can_y) & (e.clientY < can_y+can_h)){ //y coordinate
+            //console.log("-> " + e.clientX + ", " + e.clientY);
+            //console.log("Rect : ( x: " + can_x + " + " + can_w + ", y : " + can_y + " + " + can_h +")");
+            var tmpx = e.clientX-can_x;
+            var tmpy = e.clientY-can_y;
+            
+            var new_x = Math.floor((e.clientX-can_x)/(can_w/CELLS_W));
+            var new_y = Math.floor((e.clientY-can_y)/(can_h/CELLS_H));
+            /*
+            console.log("---------------------------------------------------");
+            console.log("Click on ("+e.clientX+","+e.clientY+")");
+            console.log("In canvas coord -> ("+tmpx+", "+tmpy+")");
+            console.log("(Canvas proportions -> ("+can_w+", "+can_h+")");
+            console.log("Scaled to cells -> ("+new_x+", "+new_y+")");
+            */
+            input_click(new_x, new_y);
+          }
+        }
+      }
+
+      
+
+      function input_color(){
+        var tmp = document.getElementById("color");
+        socket.emit("color", tmp.value);
+      }
+
+
+      function util_random_color(){
+        var r = Math.random()*255;
+        var g = Math.random()*255;
+        var b = Math.random()*255;
+        return "rgb("+r+","+g+","+b+")";
+      }
+
+      function util_distance(x1, y1, x2, y2){
+        return Math.sqrt( ((x1-x2)*(x1-x2)) + ((y1-y2)*(y1-y2)) );
+      }
+    </script>
+
+  </body>
+</html>

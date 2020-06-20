@@ -1,0 +1,52 @@
+TODO : 
+- Les Ordres, affichage et stockage en client.
+-> EN FAIT : Input destination en client, demande de pathfinding au serveur
+
+- Fin de tour qui reset les Ordres et le texte de lobby
+
+- Gestion des actions...
+
+
+
+**************************************************** Armures  **********************************************************
+
+Parametres        HP bonus     PA bonus     Vision Bonus     
+Lion                50           30            0
+Rhino               100          0             0
+
+
+
+*****************************************************  Armes  *********************************************************
+
+Parametres        DEGATS  COUT_PA/TIR  PORTEE_IDEALE   PRECISION   PORTEE_DE_BRUIT   POIDS 
+
+pistolet           30          30           10           80%            15            5
+fusil (semi)       60          40           13           90%            15            15
+lance-roquette     200         60           10           60%            30            30
+
+ou sinon, au lieu "d'attaquer" on dit juste viser
+et les armes auront des CD en PA pour tirer et recharger
+donc (tir - petit temps - tir)x chargeur + gros temps pour recharger
+
+on aurait
+pistolet         : 30 dgts, tir : 20 PA, chargeur : 6 , recharger : 40 PA
+mitrailleuse     :  5 dgts, tir : 2  PA, chargeur : 20, recharger : 40 PA
+
+
+*****************************************************  Pickups  *********************************************************
+Gadgets ?
+
+Sante  --> +PV
+Radar  --> 
+
+
+
+***************************************************** Infos vrac **********************************************************
+- base pour personnage :
+100 PV
+100 PA
+
+
+- tirer avec une arme dans le fog of war ennemi leur donne un indicateur rouge de bruit (si suffisamment proche)
+- chaque point de poids diminue de 1 les PA
+- se deplacer 4-connexite 10PA, se deplacer en diagonale 15PA
